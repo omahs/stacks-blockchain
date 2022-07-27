@@ -96,6 +96,7 @@ use crate::codec::{
 use crate::types::chainstate::{BlockHeaderHash, StacksAddress, StacksBlockId};
 
 use super::FeeRateEstimateRequestBody;
+use super::MinerRequestResponseBody;
 
 lazy_static! {
     static ref PATH_GETINFO: Regex = Regex::new(r#"^/v2/info$"#).unwrap();
@@ -115,6 +116,7 @@ lazy_static! {
     static ref PATH_POST_FEE_RATE_ESIMATE: Regex = Regex::new(r#"^/v2/fees/transaction$"#).unwrap();
     static ref PATH_POSTBLOCK: Regex = Regex::new(r#"^/v2/blocks/upload/([0-9a-f]{40})$"#).unwrap();
     static ref PATH_POSTMICROBLOCK: Regex = Regex::new(r#"^/v2/microblocks$"#).unwrap();
+    static ref PATH_POSTMINER: Regex = Regex::new(r#"^/v2/miner$"#).unwrap();
     static ref PATH_GET_ACCOUNT: Regex = Regex::new(&format!(
         "^/v2/accounts/(?P<principal>{})$",
         *PRINCIPAL_DATA_REGEX
@@ -1541,6 +1543,11 @@ impl HttpRequestType {
                 &HttpRequestType::parse_postmicroblock,
             ),
             (
+                "POST",
+                &PATH_POSTMINER,
+                &HttpRequestType::parse_postminer,
+            ),
+            (
                 "GET",
                 &PATH_GET_ACCOUNT,
                 &HttpRequestType::parse_get_account,
@@ -2510,6 +2517,40 @@ impl HttpRequestType {
         ))
     }
 
+    fn parse_postminer<R: Read>(
+        _protocol: &mut StacksHttp,
+        preamble: &HttpRequestPreamble,
+        _regex: &Captures,
+        _query: Option<&str>,
+        fd: &mut R,
+    ) -> Result<HttpRequestType, net_error> {
+        let content_len = preamble.get_content_length();
+        if !(content_len > 0 && content_len < MAX_PAYLOAD_LEN) {
+            return Err(net_error::DeserializeError(format!(
+                "Invalid Http request: invalid body length for PostMiner ({})",
+                content_len
+            )));
+        }
+
+        if preamble.content_type != Some(HttpContentType::JSON) {
+            return Err(net_error::DeserializeError(
+                "Invalid content-type: expected application/json".to_string(),
+            ));
+        }
+
+        let bound_fd = BoundReader::from_reader(fd, content_len as u64);
+
+        let body: MinerRequestResponseBody = serde_json::from_reader(bound_fd).map_err(|e| {
+            net_error::DeserializeError(format!("Failed to parse JSON body: {}", e))
+        })?;
+
+        Ok(HttpRequestType::PostMiner(
+            HttpRequestMetadata::from_preamble(preamble),
+            // payload,
+            // estimated_len,
+        ))
+    }
+
     fn parse_get_attachment<R: Read>(
         _protocol: &mut StacksHttp,
         preamble: &HttpRequestPreamble,
@@ -2680,6 +2721,7 @@ impl HttpRequestType {
             HttpRequestType::PostTransaction(ref md, _, _) => md,
             HttpRequestType::PostBlock(ref md, ..) => md,
             HttpRequestType::PostMicroblock(ref md, ..) => md,
+            HttpRequestType::PostMiner(ref md, ..) => md,
             HttpRequestType::GetAccount(ref md, ..) => md,
             HttpRequestType::GetDataVar(ref md, ..) => md,
             HttpRequestType::GetMapEntry(ref md, ..) => md,
@@ -2711,6 +2753,7 @@ impl HttpRequestType {
             HttpRequestType::PostTransaction(ref mut md, _, _) => md,
             HttpRequestType::PostBlock(ref mut md, ..) => md,
             HttpRequestType::PostMicroblock(ref mut md, ..) => md,
+            HttpRequestType::PostMiner(ref mut md, ..) => md,
             HttpRequestType::GetAccount(ref mut md, ..) => md,
             HttpRequestType::GetDataVar(ref mut md, ..) => md,
             HttpRequestType::GetMapEntry(ref mut md, ..) => md,
@@ -2781,6 +2824,9 @@ impl HttpRequestType {
             HttpRequestType::PostMicroblock(_md, _, tip_req) => format!(
                 "/v2/microblocks{}",
                 HttpRequestType::make_tip_query_string(tip_req, true)
+            ),
+            HttpRequestType::PostMiner(_md, ..) => format!(
+                "/v2/miner",
             ),
             HttpRequestType::GetAccount(_md, principal, tip_req, with_proof) => {
                 format!(
@@ -2916,6 +2962,7 @@ impl HttpRequestType {
             HttpRequestType::PostTransaction(..) => "/v2/transactions",
             HttpRequestType::PostBlock(..) => "/v2/blocks/upload/:block",
             HttpRequestType::PostMicroblock(..) => "/v2/microblocks",
+            HttpRequestType::PostMiner(..) => "/v2/miner",
             HttpRequestType::GetAccount(..) => "/v2/accounts/:principal",
             HttpRequestType::GetDataVar(..) => "/v2/data_var/:principal/:contract_name/:var_name",
             HttpRequestType::GetMapEntry(..) => "/v2/map_entry/:principal/:contract_name/:map_name",
@@ -4410,6 +4457,7 @@ impl MessageSequence for StacksHttpMessage {
                 HttpRequestType::PostTransaction(_, _, _) => "HTTP(PostTransaction)",
                 HttpRequestType::PostBlock(..) => "HTTP(PostBlock)",
                 HttpRequestType::PostMicroblock(..) => "HTTP(PostMicroblock)",
+                HttpRequestType::PostMiner(..) => "HTTP(PostMiner)",
                 HttpRequestType::GetAccount(..) => "HTTP(GetAccount)",
                 HttpRequestType::GetDataVar(..) => "HTTP(GetDataVar)",
                 HttpRequestType::GetMapEntry(..) => "HTTP(GetMapEntry)",
