@@ -1372,15 +1372,6 @@ pub struct FeeRateEstimateRequestBody {
     pub transaction_payload: String,
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct MinerRequestResponseBody {
-    #[serde(default)]
-    pub burn_fee_cap: Option<u64>,
-    pub satoshis_per_byte: Option<u64>,
-    pub rbf_fee_increment: Option<u64>,
-    pub max_rbf: Option<u64>,
-}
-
 /// Items in the NeighborsInfo -- combines NeighborKey and NeighborAddress
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RPCNeighbor {
@@ -1436,7 +1427,6 @@ pub enum HttpRequestType {
     PostTransaction(HttpRequestMetadata, StacksTransaction, Option<Attachment>),
     PostBlock(HttpRequestMetadata, ConsensusHash, StacksBlock),
     PostMicroblock(HttpRequestMetadata, StacksMicroblock, TipRequest),
-    PostMiner(HttpRequestMetadata),
     GetAccount(HttpRequestMetadata, PrincipalData, TipRequest, bool),
     GetDataVar(
         HttpRequestMetadata,

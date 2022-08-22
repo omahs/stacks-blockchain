@@ -2662,10 +2662,6 @@ impl ConversationHttp {
                 }
                 None
             }
-            HttpRequestType::PostMiner(ref _md) => {
-                // TODO
-                None
-            }
             HttpRequestType::MemPoolQuery(ref _md, ref query, ref page_id_opt) => {
                 Some(ConversationHttp::handle_mempool_query(
                     &mut self.connection.protocol,
